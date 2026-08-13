@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>مشاركة موقعي - تجربة</title>
+<style>
+body{font-family:Arial,sans-serif;background:#f5f5f5;margin:0;padding:20px}
+.card{max-width:520px;margin:auto;background:#fff;padding:22px;border-radius:18px;box-shadow:0 4px 18px #0002}
+input,button{font-size:16px;padding:12px;border-radius:10px;border:1px solid #ccc;margin:5px 0;width:100%;box-sizing:border-box}
+button{cursor:pointer;border:0}
+#status,#out{margin-top:14px;line-height:1.8;word-break:break-word}
+.small{font-size:13px;color:#666}
+</style>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+</head>
+<body>
+<div class="card">
+<h2>📍 مشاركة موقع تجريبية</h2>
+<p class="small">استخدميها فقط بين أجهزتك أو مع شخص موافق. الموقع لا يُرسل إلا بعد الضغط على زر المشاركة ومنح إذن GPS.</p>
+
+<label>وضع هذا الجهاز:</label>
+<select id="mode" style="width:100%;padding:12px;border-radius:10px">
+<option value="receiver">أنا أريد استقبال الموقع</option>
+<option value="sender">أنا أريد إرسال موقعي</option>
+</select>
+
+<div id="receiverBox">
+<button onclick="startReceiver()">إنشاء كود الاستقبال</button>
+<div id="myid"></div>
+</div>
+
+<div id="senderBox" style="display:none">
+<input id="peerid" placeholder="اكتبي كود الجهاز المستقبل">
+<button onclick="connectAndShare()">اتصال ومشاركة موقعي</button>
+</div>
+
+<div id="status"></div>
+<div id="out"></div>
+</div>
+
+<script>
+let peer, conn, watchId;
+
+function showMode(){
+  const m=document.getElementById('mode').value;
+  document.getElementById('receiverBox').style.display=m==='receiver'?'block':'none';
+  document.getElementById('senderBox').style.display=m==='sender'?'block':'none';
+  document.getElementById('status').textContent='';
+  document.getElementById('out').textContent='';
+}
+document.getElementById('mode').addEventListener('change',showMode);
+
+function startReceiver(){
+  peer=new Peer();
+  document.getElementById('status').textContent='⏳ جاري إنشاء كود...';
+  peer.on('open', id=>{
+    document.getElementById('myid').innerHTML='كود الاستقبال:<br><b>'+id+'</b>';
+    document.getElementById('status').textContent='✅ ابعتي الكود للجهاز الآخر.';
+  });
+  peer.on('connection', c=>{
+    conn=c;
+    document.getElementById('status').textContent='🔗 تم الاتصال. في انتظار الموقع...';
+    conn.on('data', data=>{
+      if(data && data.lat){
+        const map='https://www.google.com/maps?q='+data.lat+','+data.lon;
+        document.getElementById('out').innerHTML=
+          '📍 آخر موقع مستلم:<br>'+
+          'خط العرض: <b>'+data.lat+'</b><br>'+
+          'خط الطول: <b>'+data.lon+'</b><br>'+
+          'الدقة: '+Math.round(data.accuracy)+' متر<br>'+
+          '<a target="_blank" href="'+map+'">فتح الموقع على Google Maps</a>';
+      }
+    });
+  });
+}
+
+function connectAndShare(){
+  const id=document.getElementById('peerid').value.trim();
+  if(!id){alert('اكتبي كود الاستقبال أولًا');return;}
+  peer=new Peer();
+  document.getElementById('status').textContent='⏳ جاري الاتصال...';
+  peer.on('open',()=>{
+    conn=peer.connect(id);
+    conn.on('open',()=>{
+      document.getElementById('status').textContent='🔐 تم الاتصال. اسمحي للموقع عندما يطلب المتصفح.';
+      if(!navigator.geolocation){document.getElementById('status').textContent='❌ المتصفح لا يدعم GPS';return;}
+      watchId=navigator.geolocation.watchPosition(pos=>{
+        conn.send({
+          lat:pos.coords.latitude,
+          lon:pos.coords.longitude,
+          accuracy:pos.coords.accuracy,
+          time:Date.now()
+        });
+        document.getElementById('status').textContent='📡 تم إرسال موقعك بموافقتك.';
+      },err=>{
+        document.getElementById('status').textContent='❌ لم يتم السماح بالموقع: '+err.message;
+      },{enableHighAccuracy:true,maximumAge:5000,timeout:15000});
+    });
+  });
+}
+</script>
+</body>
+</html>
